@@ -95,6 +95,12 @@ class Response {
         this.setHeader('Location', loc);
         this.send();
     }
+
+    restricted(loc){
+        this.status(404)
+        this.setHeader('Location', loc);
+        this.send("You are trying to access forbidden directory! Not cool")
+    }
 }
 
 class HTTPServer {
@@ -112,16 +118,59 @@ class HTTPServer {
         sock.on("data", data => this.handleRequest(sock, data));
     }
 
+    redirectOrRestricted(path, res){
+        if (this.redirectMap[path]){
+            res.redirect(this.redirectMap[path]);
+            return;
+        }
+
+        if(path.includes('..')){
+            res.restricted(path)
+            return;
+        }
+    }
+
+    handleFileRequest(reqPathFull, res){
+        fs.readFile(reqPathFull, (err, data) => {
+            if(err){
+                res.status(500).send("Server Error");
+            }
+            if(data){
+                res.status(200).send(data);
+            }
+        })
+    }
+
     handleRequest(sock, binaryData) {
         const req = new Request(binaryData.toString());
         const res = new Response(sock);
         const reqPathFull = path.join(this.rootDirFull, req.path);
 
-        if (this.redirectMap[req.path]){
-            res.redirect(this.redirectMap[req.path]);
-            return;
-        }
-
+        this.redirectOrRestricted(req.path, res);
+        
+        fs.access(reqPathFull, fs.constants.F_OK, (err) => {
+            if (err) {
+                res.status(404).send("404: File Not Found");
+                return;
+            }
+    
+            fs.stat(reqPathFull, (statErr, stats) => {
+                if (statErr) {
+                    // Error accessing stats of the file/directory, send a 404
+                    res.status(500).send("Server Error");
+                    return;
+                }
+    
+                if (stats.isDirectory()) {
+                    this.handleDirectoryRequest(reqPathFull, res);
+                } else if (stats.isFile()) {
+                    this.handleFileRequest(reqPathFull, res);
+                } else {
+                    res.status(404).send("404: File Not Found");
+                }
+            });
+        });
+        
         // TODO: (see homework specification for details)
         // 0. implementation can start here, but other classes / methods can be modified or added
         // 1. handle redirects first
