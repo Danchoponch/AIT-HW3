@@ -89,6 +89,12 @@ class Response {
 
         this.sock.end();
     }
+
+    redirect(loc){
+        this.status(308);
+        this.setHeader('Location', loc);
+        this.send();
+    }
 }
 
 class HTTPServer {
@@ -110,6 +116,11 @@ class HTTPServer {
         const req = new Request(binaryData.toString());
         const res = new Response(sock);
         const reqPathFull = path.join(this.rootDirFull, req.path);
+
+        if (this.redirectMap[req.path]){
+            res.redirect(this.redirectMap[req.path]);
+            return;
+        }
 
         // TODO: (see homework specification for details)
         // 0. implementation can start here, but other classes / methods can be modified or added
