@@ -97,9 +97,9 @@ class Response {
     }
 
     restricted(loc){
-        this.status(404)
+        this.status(404);
         this.setHeader('Location', loc);
-        this.send("You are trying to access forbidden directory! Not cool")
+        this.send("You are trying to access forbidden directory! Not cool");
     }
 }
 
@@ -125,7 +125,7 @@ class HTTPServer {
         }
 
         if(path.includes('..')){
-            res.restricted(path)
+            res.restricted(path);
             return;
         }
     }
@@ -135,10 +135,58 @@ class HTTPServer {
             if(err){
                 res.status(500).send("Server Error");
             }
-            if(data){
-                res.status(200).send(data);
+            else if(getExtension(reqPathFull) === 'md'){
+                    const markdown = MarkdownIt({html: true});
+                    const rendered = markdown.render(data.toString());
+
+                    res.status(200).send(rendered);
+                }
+                else{
+                    const type = getMIMEType(reqPathFull);
+                    res.setHeader('Content-Type', type);
+    
+                    res.status(200).send(data);
+                }
+        });
+    }
+
+    handleDirectoryRequest(reqPathFull, currPath,res){
+        fs.readdir(reqPathFull, {withFileTypes: true}, (err, files) => {
+            if(err){
+                res.status(500).send("Server Error");
             }
-        })
+            else{
+                let html = `
+                <!DOCTYPE html>
+                    <html lang="en">
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Directory Listing</title>
+                        </head>
+                        <body>
+                            <ul>`;
+
+                files.forEach(file => {
+                    const checkDir = file.isDirectory();
+                    const fileName = file.name;
+                    const fileLink = checkDir ? `${fileName}/` : fileName;
+                    
+                    const filePath = path.join(currPath, fileLink);
+
+
+                    html += `<li><a href="${filePath}">${fileLink}</a></li>`;
+                });
+
+                html += `
+                    </ul>
+                    </body>
+                    </html>`;
+
+                
+                res.status(200).send(html);
+            }
+        });
     }
 
     handleRequest(sock, binaryData) {
@@ -162,10 +210,12 @@ class HTTPServer {
                 }
     
                 if (stats.isDirectory()) {
-                    this.handleDirectoryRequest(reqPathFull, res);
-                } else if (stats.isFile()) {
+                    this.handleDirectoryRequest(reqPathFull, req.path, res);
+                } 
+                else if (stats.isFile()) {
                     this.handleFileRequest(reqPathFull, res);
-                } else {
+                } 
+                else {
                     res.status(404).send("404: File Not Found");
                 }
             });
